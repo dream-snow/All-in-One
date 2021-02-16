@@ -1,0 +1,134 @@
+
+config network
+	option init 'network'
+	list affects 'dhcp'
+	list affects 'radvd'
+
+config wireless
+	list affects 'network'
+
+config firewall
+	option init 'firewall'
+	list affects 'luci-splash'
+	list affects 'qos'
+	list affects 'miniupnpd'
+
+config olsr
+	option init 'olsrd'
+
+config dhcp
+	option init 'dnsmasq'
+	list affects 'odhcpd'
+
+config odhcpd
+	option init 'odhcpd'
+
+config dropbear
+	option init 'dropbear'
+
+config httpd
+	option init 'httpd'
+
+config fstab
+	option init 'fstab'
+
+config qos
+	option init 'qos'
+
+config system
+	option init 'led'
+	list affects 'luci_statistics'
+	list affects 'dhcp'
+
+config cron
+	option init 'cron'
+
+config luci_splash
+	option init 'luci_splash'
+
+config ntpclient
+	option init 'ntpclient'
+
+config samba
+	option init 'samba'
+
+config tinyproxy
+	option init 'tinyproxy'
+
+config AdGuardHome
+	option init 'AdGuardHome'
+
+config minidlna 'minidlna'
+
+config upnpd
+	option init 'miniupnpd'
+
+config nlbwmon
+	option init 'nlbwmon'
+
+config shairplay
+	option init 'shairplay'
+
+config luci_statistics
+	option init 'luci_statistics'
+
+config zerotier
+	option init 'zerotier'
+
+config smartdns
+	option init 'smartdns'
+
+config appfilter
+	option exec '/etc/init.d/appfilter reload'
+
+config adbyby
+	option init 'adbyby'
+
+config cifs
+	option init 'cifs'
+
+config ksmbd
+	option init 'ksmbd'
+
+config timewol
+	option init 'timewol'
+
+config webrestriction
+	option init 'webrestriction'
+
+config weburl
+	option init 'weburl'
+
+config filebrowser
+	option init 'filebrowser'
+
+config socat
+	option init 'socat'
+
+config timecontrol
+	option init 'timecontrol'
+
+config arpbind
+	option init 'arpbind'
+
+config jd-dailybonus
+	option init 'jd-dailybonus'
+
+config koolproxy
+	option init 'koolproxy'
+
+config serverchan
+	option init 'serverchan'
+
+config shadowsocksr
+	option init 'shadowsocksr'
+
+config vssr
+	option init 'vssr'
+
+config sfe
+	option init 'sfe'
+
+config unblockmusic
+	option init 'unblockmusic'
+

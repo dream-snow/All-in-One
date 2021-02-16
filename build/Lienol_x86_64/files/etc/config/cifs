@@ -1,0 +1,18 @@
+
+config cifs
+	option workgroup 'WORKGROUP'
+	option iocharset 'utf8'
+	option delay '5'
+	option mountarea '/mnt'
+	option enabled '1'
+
+config natshare
+	option iocharset 'utf8'
+	option smbver '3.0'
+	option agm 'rw'
+	option users 'admin'
+	option pwd 'DcsBj001'
+	option server '192.168.20.117'
+	option name 'home'
+	option natpath '/opt/home'
+
