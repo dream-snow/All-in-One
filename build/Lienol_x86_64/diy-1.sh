@@ -12,6 +12,7 @@ git clone https://github.com/fw876/helloworld package/luci-app-ssr-plus
 git clone https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
 git clone https://github.com/jerrykuku/luci-app-vssr package/luci-app-vssr
 git clone https://github.com/vernesong/OpenClash package/luci-app-openclash
+git clone https://github.com/garypang13/openwrt-static-qb.git package/openwrt-static-qb
 
 git clone https://github.com/garypang13/luci-app-bypass package/luci-app-bypass
 svn co https://github.com/garypang13/openwrt-packages/trunk/lua-maxminddb
