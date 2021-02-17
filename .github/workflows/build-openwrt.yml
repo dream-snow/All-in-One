@@ -24,6 +24,9 @@ on:
 
 env: 
   REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+  SCKEY: ${{ secrets.SCKEY }}
+  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
   TZ: Asia/Shanghai
   GITHUB_RELEASE: https://github.com/dream-snow/All-in-One/releases
 
