@@ -11,7 +11,7 @@ on:
     inputs:
       ssh:
         description: 'SSH远程'
-        required: true
+        required: false
         default: 'ssh-actions'
 
 #定时触发开始编译(把下面两个#去掉开启,时间设置请看定时编译说明)
@@ -36,17 +36,17 @@ jobs:
       matrix:
         target: [Lienol_x86_64]
 
-     # [Lede_x86_64,Lede_gl_mt300n_v2,Lede_nanopi_r2s,Lede_nanopi_r4s,Lede_newifi_d2,p2w_r619ac_128m,Lede_phicomm_k2p,Lede_phicomm_n1,Lede_redmi_ac2100,Lede_wankeyun,Lede_wndr3800,Lede_wndr4300_v1,Lede_wr703n_v1,Lede_xiaomi_r3pro,Lede_xiaoyu_c5,Lede_Raspberry_Pi4]
+     # [Lede_x86_64,Lede_gl_mt300n_v2,Lede_nanopi_r2s,Lede_nanopi_r4s,Lede_newifi_d2,Lede_p2w_r619ac_128m,Lede_phicomm_k2p]
+     # [Lede_phicomm_n1,Lede_redmi_ac2100,Lede_wankeyun,Lede_wndr3800,Lede_wndr4300_v1,Lede_xiaomi_r3pro,Lede_xiaoyu_c5,Lede_Raspberry_Pi4]
      
      # [Lienol_phicomm_k2p,Lienol_phicomm_k3,Lienol_x86_64]
-     
-     # [Project_x86_64,Project_nanopi_r2s,Project_nanopi_r4s,Project_newifi_d2,Project_phicomm_k3,Project_phicomm_n1,Project_xiaomi_ac2100,Project_xiaomi_mir3g,Project_xiaoyu_c5]
-     
-     # [openwrt] 
-     
-     # 除了编译【openwrt】机型外，其他机型都直接打入了常用插件了，不需要自己再拉取插件，除非我的插件包跟源码自带的都没有，你就自己添加吧，说明的《各种命令的简单介绍》有教程。
-     # 选择编译【openwrt】纯天然不经任何修改的，增加插件可以在diy-1.sh增加，也可在settings.ini里修改成你想要编译的源码跟分支。
+
+     # [Project_x86_64,Project_nanopi_r2s,Project_nanopi_r4s,Project_newifi_d2,Project_phicomm_k3,Project_phicomm_n1,Project_xiaomi_ac2100,Project_xiaomi_mir3g,Project_xiaoyu_c5] 
+
+     # 各个源码都直接打入了常用插件了，不需要自己再拉取插件，除非我的插件包跟源码自带的都没有，你就自己添加吧，说明的《各种命令的简单介绍》有教程。
      # 选择【Lede_phicomm_n1或Project_phicomm_n1】的机型文件夹编译的话，会自动编译出（ N1、微加云、贝壳云、我家云、S9xxx ）固件。
+     # [Lede_opewrt,Lienol_opewrt,Project_opewrt] 分别为三个源码的公共文件,你没找到你要编译的机型就使用各源码的公共文件夹来编译就可以了。
+
 
     steps:
     - name: 准备结束
@@ -70,7 +70,7 @@ jobs:
         echo "REGULAR_UPDATE=${REGULAR_UPDATE}" >> $GITHUB_ENV
         echo "Updete_firmware=${Updete_firmware}" >> $GITHUB_ENV
         echo "Extension=${Extension}" >> $GITHUB_ENV
-    
+     
     - name: 整理编译环境
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -118,13 +118,14 @@ jobs:
         [ -e config_generate ] && cp -f config_generate openwrt/package/base-files/files/bin
         [ -e 99-default_network ] && cp -f 99-default_network openwrt/package/base-files/files/etc/board.d
         [ -e 10-default.conf ] && cp -f 10-default.conf openwrt/package/base-files/files/etc/sysctl.d    
-        
         cd openwrt
         source "${PATH1}/common.sh" && Diy_all
         if [[ "${REPO_URL}" == "${LEDE}" ]]; then
           source "${PATH1}/common.sh" && Diy_lede
         elif [[ "${REPO_URL}" == "${LIENOL}" ]]; then
           source "${PATH1}/common.sh" && Diy_lienol
+        elif [[ "${REPO_URL}" == "${PROJECT}" ]]; then
+          source "${PATH1}/common.sh" && Diy_immortalwrt
         fi
         /bin/bash "${PATH1}/$DIY_P1_SH"
         ./scripts/feeds clean
@@ -141,6 +142,10 @@ jobs:
           source "${PATH1}/common.sh" && Diy_lienol2
           echo "NAME2=Lienol" >> $GITHUB_ENV
           echo "ZUOZHE=lienol's" >> $GITHUB_ENV
+        elif [[ "${REPO_URL}" == "${PROJECT}" ]]; then
+          source "${PATH1}/common.sh" && Diy_immortalwrt2
+          echo "NAME2=Project" >> $GITHUB_ENV
+          echo "ZUOZHE=ctcgfw" >> $GITHUB_ENV
         fi
         /bin/bash "${PATH1}/$DIY_P2_SH"
         find "${PATH1}/patches" -type f -name '*.patch' -print0 | sort -z | xargs -I % -t -0 -n 1 sh -c "cat '%'  | patch -d './' -p1 --forward --no-backup-if-mismatch"
@@ -150,14 +155,14 @@ jobs:
           echo "Compile_Date=$(date +%Y%m%d%H%M)" > $GITHUB_WORKSPACE/Openwrt.info
           source "${PATH1}/upgrade.sh" && Diy_Part1
         fi
-     
+    
     - name: SSH远程连接（若打开了此功能,在此转圈2分钟还展开不了,请看《SSH连接教程》）
       uses: 281677160/debugger-action@master
-      if: env.SSH_ACTIONS == 'true' || (github.event.inputs.ssh == 'ssh' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+      if: env.SSH_ACTIONS == 'true' || (github.event.inputs.ssh == 'ssh' && github.event.inputs.ssh  != 'false')
       env:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-
+    
     - name: 下载软件包
       id: package
       run: |
@@ -180,7 +185,7 @@ jobs:
         cd openwrt
         source "${PATH1}/upgrade.sh"
         source "${PATH1}/common.sh" && Diy_xinxi
-    
+        
     - name: 开始编译固件
       id: compile
       run: |
@@ -200,14 +205,14 @@ jobs:
          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > NAME1
          [ -s NAME1 ] && echo "NAME1=$(cat NAME1)" >> $GITHUB_ENV
         fi
-    
+        
     - name: 上传bin文件夹(固件+ipk)在github actions
       uses: actions/upload-artifact@v2
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
         name: OpenWrt_bin_${{ env.NAME2 }}_${{ env.NAME1 }}_${{ env.date }}
         path: openwrt/bin
-   
+    
     - name: 整理固件文件夹
       id: organizer
       run: |
