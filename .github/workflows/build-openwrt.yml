@@ -13,26 +13,21 @@ on:
         description: 'SSH远程'
         required: true
         default: 'ssh-actions'
-      release:
-        description: '发布固件'
-        required: false
-        default: 'release-actions'
 
 #定时触发开始编译(把下面两个#去掉开启,时间设置请看定时编译说明)
 #  schedule:
 #    - cron: 0 8 */5 * *
 
-env: 
-  REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
-  SCKEY: ${{ secrets.SCKEY }}
-  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+env:
+  LEDE: https://github.com/coolsnowwolf/lede
+  LIENOL: https://github.com/Lienol/openwrt
+  PROJECT: https://github.com/immortalwrt/immortalwrt
+  GITURL: https://github.com/${{github.repository}}
   TZ: Asia/Shanghai
-  GITHUB_RELEASE: https://github.com/dream-snow/All-in-One/releases
 
-jobs: 
+jobs:
   build:
-    runs-on: Ubuntu-20.04
+    runs-on: ubuntu-20.04
     if: github.event.repository.owner.id == github.event.sender.id
 
     name: 编译 "${{matrix.target}}"
@@ -76,33 +71,45 @@ jobs:
         echo "Updete_firmware=${Updete_firmware}" >> $GITHUB_ENV
         echo "Extension=${Extension}" >> $GITHUB_ENV
     
-    - name: 开始安装编译所需系统
+    - name: 整理编译环境
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
-        sudo -E apt-get -qq update -y
-        sudo -E apt-get -qq install -y build-essential asciidoc binutils bzip2 gawk gettext git libc6-dev-i386 libncurses5 libtinfo-dev libtinfo5 ncurses-doc libncurses5-dev libz-dev patch python3 python2.7 unzip zlib1g-dev lib32gcc1 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler g++-multilib antlr3 gperf wget curl swig rsync
-        sudo -E apt-get -qq autoremove -y --purge
-        sudo -E apt-get -qq clean -y
+        docker rmi `docker images -q`
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /usr/lib/jvm /opt/ghc
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install $(curl -fsSL git.io/depends-ubuntu-2004)
+        sudo -E apt-get -qq autoremove --purge
+        sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
-        
+    
     - name: 下载"${{matrix.target}}"源码
       working-directory: /workdir
       run: |
-        df -hT $PWD
-        git clone -b $REPO_BRANCH --single-branch $REPO_URL openwrt
+        git clone -b "$REPO_BRANCH" --single-branch "$REPO_URL" "openwrt"
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-        git clone -b main --single-branch https://github.com/281677160/Custom openwrt/common
-        chmod +x openwrt/common/* ./
+        echo "Home=${GITHUB_WORKSPACE}/openwrt" >> $GITHUB_ENV
+        echo "PATH1=${GITHUB_WORKSPACE}/openwrt/build/${{matrix.target}}" >> $GITHUB_ENV
+        echo "artifact=${GITHUB_WORKSPACE}/openwrt/bin/Firmware" >> $GITHUB_ENV
     
-    - name: 公告（每次启动都读取最新内容，展开可以查看）
+    - name: 整理脚本文件
+      run: |
+        git clone -b main https://github.com/281677160/Custom "${GITHUB_WORKSPACE}/build/common"
+        cp -Rf `find ./ -maxdepth 1 -type d ! -path './openwrt' ! -path './'` openwrt
+        cp -Rf "${GITHUB_WORKSPACE}/build/common"/*.sh "${PATH1}"
+        chmod -R +x "${PATH1}"
+        source "${PATH1}/common.sh" && Diy_settings
+        rm -rf {build,README.md}
+        if [[ "${{ github.event.inputs.ssh }}" == 'ssh' ]]; then
+          echo "SSHYC=true" >> $GITHUB_ENV
+        fi
+    
+    - name: 公告
       run: |
         cd openwrt
-        echo "GITHUB_RELEASE=$(grep "https://github.com/[a-zA-Z0-9]" ${GITHUB_WORKSPACE}/.git/config | cut -c8-100)" >> $GITHUB_ENV
-        source common/common.sh && Diy_notice
+        source "${PATH1}/common.sh" && Diy_notice
         
     - name: 加载源,patch补丁和自定义设置
       run: |
@@ -112,61 +119,36 @@ jobs:
         [ -e 99-default_network ] && cp -f 99-default_network openwrt/package/base-files/files/etc/board.d
         [ -e 10-default.conf ] && cp -f 10-default.conf openwrt/package/base-files/files/etc/sysctl.d    
         
-        cp -Rf `find ./ -maxdepth 1 -type d ! -path './openwrt' ! -path './'` openwrt
         cd openwrt
-        source common/common.sh && Diy_all
-        if [ ${{matrix.target}} != "openwrt" ]; then
-          if [ "${REPO_URL}" == "https://github.com/coolsnowwolf/lede" ]; then
-            source common/common.sh && Diy_lede
-          elif [ "${REPO_URL}" == "https://github.com/Lienol/openwrt" ]; then
-            source common/common.sh && Diy_lienol
-          elif [ "${REPO_URL}" == "https://github.com/immortalwrt/immortalwrt" ]; then
-            source common/common.sh && Diy_immortalwrt
-          fi
+        source "${PATH1}/common.sh" && Diy_all
+        if [[ "${REPO_URL}" == "${LEDE}" ]]; then
+          source "${PATH1}/common.sh" && Diy_lede
+        elif [[ "${REPO_URL}" == "${LIENOL}" ]]; then
+          source "${PATH1}/common.sh" && Diy_lienol
         fi
-        if [ -f "build/${{matrix.target}}/$DIY_P1_SH" ]; then
-          chmod +x build/${{matrix.target}}/$DIY_P1_SH
-          /bin/bash "build/${{matrix.target}}/$DIY_P1_SH"
+        /bin/bash "${PATH1}/$DIY_P1_SH"
+        ./scripts/feeds clean
+        ./scripts/feeds update -a && ./scripts/feeds install -a
+        cp -Rf "${PATH1}/files" ./
+        chmod -R +x ${Home}/files
+        cp -Rf "${PATH1}/diy"/* ./
+        source "${PATH1}/common.sh" && Diy_all2
+        if [[ "${REPO_URL}" == "${LEDE}" ]]; then
+          source "${PATH1}/common.sh" && Diy_lede2
+          echo "NAME2=Lede" >> $GITHUB_ENV
+          echo "ZUOZHE=Lean's" >> $GITHUB_ENV
+        elif [[ "${REPO_URL}" == "${LIENOL}" ]]; then
+          source "${PATH1}/common.sh" && Diy_lienol2
+          echo "NAME2=Lienol" >> $GITHUB_ENV
+          echo "ZUOZHE=lienol's" >> $GITHUB_ENV
         fi
-        ./scripts/feeds clean && ./scripts/feeds update -a
-        ./scripts/feeds install -a && ./scripts/feeds install -a
-        source common/common.sh && Diy_all2
-        if [ "${REPO_URL}" == "https://github.com/coolsnowwolf/lede" ]; then
-          source common/common.sh && Diy_lede2
-          echo "NAME2=Lede-" >> $GITHUB_ENV
-          echo "Source=Lede" >> $GITHUB_ENV
-          echo "ZUOZHE=lean" >> $GITHUB_ENV
-        elif [ "${REPO_URL}" == "https://github.com/Lienol/openwrt" ]; then
-          source common/common.sh && Diy_lienol2
-          echo "NAME2=Lienol-" >> $GITHUB_ENV
-          echo "Source=Lienol" >> $GITHUB_ENV
-          echo "ZUOZHE=lienol" >> $GITHUB_ENV
-        elif [ "${REPO_URL}" == "https://github.com/immortalwrt/immortalwrt" ]; then
-          source common/common.sh && Diy_immortalwrt2
-          echo "NAME2=Project-" >> $GITHUB_ENV
-          echo "Source=Project" >> $GITHUB_ENV
-          echo "ZUOZHE=CTCGFW" >> $GITHUB_ENV
-        fi
-        if [ -f "build/${{matrix.target}}/$DIY_P2_SH" ]; then
-          chmod +x build/${{matrix.target}}/$DIY_P2_SH
-          /bin/bash "build/${{matrix.target}}/$DIY_P2_SH"
-        fi
-        if [ -n "$(ls -A "build/${{matrix.target}}/patches" 2>/dev/null)" ]; then
-          find "build/${{matrix.target}}/patches" -type f -name '*.patch' -print0 | sort -z | xargs -I % -t -0 -n 1 sh -c "cat '%'  | patch -d './' -p1 --forward --no-backup-if-mismatch"
-        fi
-        if [ -n "$(ls -A "build/${{matrix.target}}/files" 2>/dev/null)" ]; then
-          cp -rf build/${{matrix.target}}/files/* files
-          chmod -R 777 ./files
-        fi
-        if [ -n "$(ls -A "build/${{matrix.target}}/diy" 2>/dev/null)" ]; then
-          cp -Rf build/${{matrix.target}}/diy/* ./
-        fi
-        [ -e build/${{matrix.target}}/$CONFIG_FILE ] && mv build/${{matrix.target}}/$CONFIG_FILE .config
-        if [ ${{matrix.target}} != "openwrt" ]; then
-          if [ "${REGULAR_UPDATE}" == "true" ]; then
-            echo "Compile_Date=$(date +%Y%m%d-%H%M)" > $GITHUB_WORKSPACE/Openwrt.info
-            source common/upgrade.sh && Diy_Part1
-          fi
+        /bin/bash "${PATH1}/$DIY_P2_SH"
+        find "${PATH1}/patches" -type f -name '*.patch' -print0 | sort -z | xargs -I % -t -0 -n 1 sh -c "cat '%'  | patch -d './' -p1 --forward --no-backup-if-mismatch"
+        ./scripts/feeds install -a
+        [ -e "$PATH1/$CONFIG_FILE" ] && mv "$PATH1/$CONFIG_FILE" .config
+        if [[ "${REGULAR_UPDATE}" == "true" ]]; then
+          echo "Compile_Date=$(date +%Y%m%d%H%M)" > $GITHUB_WORKSPACE/Openwrt.info
+          source "${PATH1}/upgrade.sh" && Diy_Part1
         fi
      
     - name: SSH远程连接（若打开了此功能,在此转圈2分钟还展开不了,请看《SSH连接教程》）
@@ -185,19 +167,19 @@ jobs:
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
     
+    - name: 准备就绪
+      run: |
+        cd openwrt
+        source "${PATH1}/common.sh" && Diy_adgu
+        if [ "${REGULAR_UPDATE}" == "true" ]; then
+          source "${PATH1}/upgrade.sh" && Diy_Part2
+        fi
+    
     - name: 编译信息
       run: |
         cd openwrt
-        if [[ ${{matrix.target}} != "openwrt" ]]; then
-          if [[ "${REGULAR_UPDATE}" == "true" ]]; then
-            source common/upgrade.sh && Diy_Part2
-            echo "log1=$(awk 'NR==4' package/base-files/files/etc/openwrt_info)" >> $GITHUB_ENV
-            echo "log2=$(awk 'NR==3' package/base-files/files/etc/openwrt_info)" >> $GITHUB_ENV
-            echo "log3=$(awk 'NR==1' package/base-files/files/etc/openwrt_info)" >> $GITHUB_ENV
-          else
-            source common/common.sh && Diy_xinxi
-          fi
-        fi
+        source "${PATH1}/upgrade.sh"
+        source "${PATH1}/common.sh" && Diy_xinxi
     
     - name: 开始编译固件
       id: compile
@@ -207,38 +189,35 @@ jobs:
         make -j$(($(nproc)+1)) || make -j1 V=s
         echo "::set-output name=status::success"
         echo "date=$(date "+%y.%m.%d-%H%M")" >> $GITHUB_ENV
-        echo "date1=$(date "+%Y年%m月%d号-%H点%M分")" >> $GITHUB_ENV
         echo "date2=$(date "+%Y%m%d%H%M%S")" >> $GITHUB_ENV
         DEVICE="$(awk -F '[="]+' '/TARGET_BOARD/{print $2}' .config)"
         SUBTARGET="$(awk -F '[="]+' '/TARGET_SUBTARGET/{print $2}' .config)"
         if [ "${DEVICE}" == "x86" ]; then
          echo "NAME1=x86-${SUBTARGET}" >> $GITHUB_ENV
         elif [[ ${{matrix.target}} =~ (Lede_phicomm_n1|Project_phicomm_n1) ]]; then
-         echo "NAME1=n1,Vplus,Beikeyun,L1Pro,S9xxx" >> $GITHUB_ENV
-        elif [ "${DEVICE}" != "x86" ]; then
+         echo "NAME1=N1,Vplus,Beikeyun,L1Pro,S9xxx" >> $GITHUB_ENV
+        else
          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > NAME1
          [ -s NAME1 ] && echo "NAME1=$(cat NAME1)" >> $GITHUB_ENV
         fi
     
-    - name: 上传bin文件夹(固件+ipk)在github空间
+    - name: 上传bin文件夹(固件+ipk)在github actions
       uses: actions/upload-artifact@v2
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: OpenWrt_bin_${{ env.NAME2 }}${{ env.NAME1 }}_${{ env.date }}
+        name: OpenWrt_bin_${{ env.NAME2 }}_${{ env.NAME1 }}_${{ env.date }}
         path: openwrt/bin
    
     - name: 整理固件文件夹
       id: organizer
       run: |
         cd openwrt
-        if [[ ${{matrix.target}} != "openwrt" ]]; then
-          if [[ "${REGULAR_UPDATE}" == "true" ]]; then
-            source common/upgrade.sh && Diy_Part3
-          fi  
+        if [[ "${REGULAR_UPDATE}" == "true" ]]; then
+          source "${PATH1}/upgrade.sh" && Diy_Part3
         fi
         mkdir bin/config
         find bin/targets/ -name "*config.buildinfo*" | xargs -i mv -f {} bin/config
-        if [ -n "$(ls -A "openwrt/bin/targets/x86" 2>/dev/null)" ]; then
+        if [ -n "$(ls -A "bin/targets/x86" 2>/dev/null)" ]; then
           find bin/targets/x86/* -name "*kernel*" | xargs -i mv -f {} bin/targets
         fi
         cd bin/targets/*/*
@@ -250,52 +229,49 @@ jobs:
         find -name "*Image*" | xargs -i mv -f {} packages
         rm -rf packages
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "BOT=TRUE" >> $GITHUB_ENV
         echo "::set-output name=status::success"
     
-    - name: 上传.config配置文件在github空间
+    - name: 上传.config配置文件在github actions
       uses: actions/upload-artifact@v2
       if: steps.organizer.outputs.status == 'success' && env.UPLOAD_CONFIG == 'true'
       with:
-        name: .config-${{ env.NAME2 }}${{ env.NAME1 }}_${{ env.date }}
+        name: .config_${{ env.NAME2 }}_${{ env.NAME1 }}_${{ env.date }}
         path: openwrt/bin/config
 
-    - name: 上传固件在github空间
+    - name: 上传固件在github actions
       uses: actions/upload-artifact@v2
       if: steps.organizer.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true'
       with:
-        name: OpenWrt-${{ env.NAME2 }}${{ env.NAME1 }}-firmware-${{ env.date }}
+        name: OpenWrt-${{ env.NAME2 }}-${{ env.NAME1 }}-firmware-${{ env.date }}
         path: ${{ env.FIRMWARE }}
-    
-    - name: 自动发布固件
+
+    - name: 把定时更新固件发布到云端
       uses: softprops/action-gh-release@v1
-      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' || (github.event.inputs.release == 'release' && github.event.inputs.release  != 'false')
-      env:
-        GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
-      with:
-        name: ${{ env.date1 }} 「 ${{ env.WXFB_MESSAGE }} 」固件
-        tag_name: ${{ env.date2 }}
-        body: |
-            ☆  源码 : ${{ env.REPO_URL }}
-            ☆  分支 : ${{ env.REPO_BRANCH }}
-            ☆  感谢源码作者[ ${{ env.ZUOZHE }}大神 ]无私分享！
-            
-            🎉 [ ${{ env.NAME2 }}${{ env.NAME1 }} ]固件下载 ✨
-            -
-            💐 奶牛快传(国内高速🚀下载)： ${{ env.COWTRANSFER_URL }}
-            
-            ⛄ WeTransfer(国外高速🚀下载)： ${{ env.WETRANSFER_URL }}
-            
-            🌴 链接有效期为7天，无需注册直接下载 🐤
-        files: ${{ env.FIRMWARE }}/*
-    
-    - name: 发布定时升级云端地址
-      uses: softprops/action-gh-release@v1
-      if: steps.compile.outputs.status == 'success' && env.REGULAR_UPDATE == 'true'
+      if: steps.organizer.outputs.status == 'success' && env.REGULAR_UPDATE == 'true'
       env:
         GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
       with:
         name: 定时升级云端地址
         tag_name: update_Firmware
-        body: ${{ env.log1 }}-${{ env.log2 }}-${{ env.log3 }}（完成时间-${{ env.date }}）
-        files: openwrt/bin/Firmware/*
-  
+        files: ${{ env.artifact }}/*
+    
+    - name: 整理发布信息
+      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
+      run: |
+        echo "### 发布于$(date +"%Y年%m月%d号-%H点%M分")" > update_log.txt
+        curl -fsSL git.io/file-transfer | sh
+        ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
+        echo "##### 奶牛快传：$(cat cowtransfer.log | grep https | cut -f3 -d" ")" >> update_log.txt
+        ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
+        echo "##### WETRANSFER：$(cat wetransfer.log | grep https | cut -f3 -d" ")" >> update_log.txt
+    
+    - name: 发布固件
+      uses: ncipollo/release-action@v1
+      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
+      with:
+        name: ${{ env.NAME2 }}-${{ env.NAME1 }}
+        tag: ${{ env.date2 }}
+        token: ${{ secrets.REPO_TOKEN }}
+        bodyFile: "update_log.txt"
+        artifacts: "${{ env.FIRMWARE }}/*"
