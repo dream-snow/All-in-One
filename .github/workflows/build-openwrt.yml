@@ -23,6 +23,9 @@ env:
   LIENOL: https://github.com/Lienol/openwrt
   PROJECT: https://github.com/immortalwrt/immortalwrt
   GITURL: https://github.com/${{github.repository}}
+  Author: ${{github.actor}}
+  Run_number: ${{github.run_number}}
+  Run_workflow: ${{github.workflow}}
   TZ: Asia/Shanghai
 
 jobs:
@@ -34,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [Lienol_x86_64]
+        target: [Lede_x86_64,Lienol_x86_64]
 
      # [Lede_x86_64,Lede_gl_mt300n_v2,Lede_nanopi_r2s,Lede_nanopi_r4s,Lede_newifi_d2,Lede_p2w_r619ac_128m,Lede_phicomm_k2p]
      # [Lede_phicomm_n1,Lede_redmi_ac2100,Lede_wankeyun,Lede_wndr3800,Lede_wndr4300_v1,Lede_xiaomi_r3pro,Lede_xiaoyu_c5,Lede_Raspberry_Pi4]
@@ -56,7 +59,6 @@ jobs:
       run: |
         source "${GITHUB_WORKSPACE}/build/${{matrix.target}}/settings.ini"
         echo "Modelfile=${{matrix.target}}" >> $GITHUB_ENV
-        echo "Author=${{github.actor}}" >> $GITHUB_ENV
         echo "REPO_URL=${REPO_URL}" >> $GITHUB_ENV
         echo "REPO_BRANCH=${REPO_BRANCH}" >> $GITHUB_ENV
         echo "CONFIG_FILE=${CONFIG_FILE}" >> $GITHUB_ENV
@@ -70,7 +72,7 @@ jobs:
         echo "REGULAR_UPDATE=${REGULAR_UPDATE}" >> $GITHUB_ENV
         echo "Updete_firmware=${Updete_firmware}" >> $GITHUB_ENV
         echo "Extension=${Extension}" >> $GITHUB_ENV
-     
+        
     - name: 设置编译环境
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -111,30 +113,25 @@ jobs:
         cd openwrt
         source "${PATH1}/common.sh" && Diy_notice
         
-    - name: 加载源、patches、files、diy和自定义
+    - name: 加载源,patch补丁和自定义设置
       run: |
         echo "Apply files..."     
         [ -e shadow ] && cp -f shadow openwrt/package/base-files/files/etc
         [ -e config_generate ] && cp -f config_generate openwrt/package/base-files/files/bin
         [ -e 99-default_network ] && cp -f 99-default_network openwrt/package/base-files/files/etc/board.d
-        [ -e 10-default.conf ] && cp -f 10-default.conf openwrt/package/base-files/files/etc/sysctl.d  
-
+        [ -e 10-default.conf ] && cp -f 10-default.conf openwrt/package/base-files/files/etc/sysctl.d
+        
         cd openwrt
         source "${PATH1}/common.sh" && Diy_all
         if [[ "${REPO_URL}" == "${LEDE}" ]]; then
           source "${PATH1}/common.sh" && Diy_lede
         elif [[ "${REPO_URL}" == "${LIENOL}" ]]; then
           source "${PATH1}/common.sh" && Diy_lienol
-        elif [[ "${REPO_URL}" == "${PROJECT}" ]]; then
-          source "${PATH1}/common.sh" && Diy_immortalwrt
         fi
+        
         /bin/bash "${PATH1}/$DIY_P1_SH"
         ./scripts/feeds clean
         ./scripts/feeds update -a && ./scripts/feeds install -a
-        cp -Rf "${PATH1}/files" ./
-        chmod -R +x ${Home}/files
-        cp -Rf "${PATH1}/diy"/* ./
-        source "${PATH1}/common.sh" && Diy_all2
         if [[ "${REPO_URL}" == "${LEDE}" ]]; then
           source "${PATH1}/common.sh" && Diy_lede2
           echo "NAME2=Lede" >> $GITHUB_ENV
@@ -143,13 +140,18 @@ jobs:
           source "${PATH1}/common.sh" && Diy_lienol2
           echo "NAME2=Lienol" >> $GITHUB_ENV
           echo "ZUOZHE=lienol's" >> $GITHUB_ENV
-        elif [[ "${REPO_URL}" == "${PROJECT}" ]]; then
-          source "${PATH1}/common.sh" && Diy_immortalwrt2
-          echo "NAME2=Project" >> $GITHUB_ENV
-          echo "ZUOZHE=ctcgfw" >> $GITHUB_ENV
+        fi
+        source "${PATH1}/common.sh" && Diy_all2
+        if [ -n "$(ls -A "${PATH1}/files" 2>/dev/null)" ]; then
+          cp -Rf "${PATH1}/files" "${Home}" && chmod -R +x ${Home}/files
+        fi
+        if [ -n "$(ls -A "${PATH1}/diy" 2>/dev/null)" ]; then
+          cp -Rf "${PATH1}"/diy/* "${Home}"
+        fi
+        if [ -n "$(ls -A "${PATH1}/patches" 2>/dev/null)" ]; then
+          find "${PATH1}/patches" -type f -name '*.patch' -print0 | sort -z | xargs -I % -t -0 -n 1 sh -c "cat '%'  | patch -d './' -p1 --forward --no-backup-if-mismatch"
         fi
         /bin/bash "${PATH1}/$DIY_P2_SH"
-        find "${PATH1}/patches" -type f -name '*.patch' -print0 | sort -z | xargs -I % -t -0 -n 1 sh -c "cat '%'  | patch -d './' -p1 --forward --no-backup-if-mismatch"
         ./scripts/feeds install -a
         [ -e "$PATH1/$CONFIG_FILE" ] && mv "$PATH1/$CONFIG_FILE" .config
         if [[ "${REGULAR_UPDATE}" == "true" ]]; then
@@ -212,9 +214,9 @@ jobs:
       uses: actions/upload-artifact@v2
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: OpenWrt_bin_${{ env.NAME2 }}_${{ env.NAME1 }}_${{ env.date }}
+        name: Bin_filename+ipk_${{ env.NAME2 }}_${{ env.NAME1 }}_${{ env.date }}
         path: openwrt/bin
-    
+
     - name: 整理固件文件夹
       id: organizer
       run: |
@@ -263,6 +265,16 @@ jobs:
         tag_name: update_Firmware
         files: ${{ env.artifact }}/*
     
+    - name: 整理发布信息
+      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
+      run: |
+        echo "### (#${{github.run_number}})$(date +"%Y年%m月%d号-%H点%M分")" > update_log.txt
+        curl -fsSL git.io/file-transfer | sh
+        ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
+        echo "##### 奶牛快传：$(cat cowtransfer.log | grep https | cut -f3 -d" ")" >> update_log.txt
+        ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
+        echo "##### WETRANSFER：$(cat wetransfer.log | grep https | cut -f3 -d" ")" >> update_log.txt
+    
     - name: 发布固件
       uses: ncipollo/release-action@v1
       if: steps.organizer.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
@@ -272,3 +284,4 @@ jobs:
         token: ${{ secrets.REPO_TOKEN }}
         bodyFile: "update_log.txt"
         artifacts: "${{ env.FIRMWARE }}/*"
+  
