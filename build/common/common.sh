@@ -27,23 +27,15 @@ TIME() {
 ################################################################################################################
 Diy_lede() {
 
-find . -name 'luci-app-netdata' -o -name 'luci-theme-argon' -o -name 'k3screenctrl' | xargs -i rm -rf {}
+find . -name 'luci-app-netdata' -o -name 'netdata' -o -name 'luci-theme-argon' -o -name 'k3screenctrl' | xargs -i rm -rf {}
 
 sed -i 's/iptables -t nat/# iptables -t nat/g' "${ZZZ}"
 
-if [[ "${REPO_BRANCH}" == "master" ]]; then
-	sed -i '/IMAGES_GZIP/d' "${PATH1}/${CONFIG_FILE}" > /dev/null 2>&1
-	echo -e "\nCONFIG_TARGET_IMAGES_GZIP=y" >> "${PATH1}/${CONFIG_FILE}"
-fi
-if [ -n "$(ls -A "target/linux/sunxi/base-files/etc/board.d/01_leds" 2>/dev/null)" ]; then
-	chmod -R +x target/linux/sunxi/base-files/etc/board.d/01_leds
-fi
+sed -i '/IMAGES_GZIP/d' "${PATH1}/${CONFIG_FILE}" > /dev/null 2>&1
+echo -e "\nCONFIG_TARGET_IMAGES_GZIP=y" >> "${PATH1}/${CONFIG_FILE}"
 
 git clone https://github.com/fw876/helloworld package/luci-app-ssr-plus
 git clone https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
-git clone https://github.com/jerrykuku/luci-app-vssr package/luci-app-vssr
-svn co  https://github.com/vernesong/OpenClash/trunk feeds/luci/luci-app-openclash > /dev/null 2>&1
-git clone https://github.com/frainzy1477/luci-app-clash package/luci-app-clash
 
 sed -i "/exit 0/i\chmod +x /etc/webweb.sh && source /etc/webweb.sh > /dev/null 2>&1" package/base-files/files/etc/rc.local
 }
@@ -54,19 +46,12 @@ sed -i "/exit 0/i\chmod +x /etc/webweb.sh && source /etc/webweb.sh > /dev/null 2
 ################################################################################################################
 Diy_lienol() {
 
-find . -name 'luci-app-netdata' -o -name 'luci-theme-argon' | xargs -i rm -rf {}
+find . -name 'luci-app-netdata' -o -name 'netdata' -o -name 'luci-theme-argon' | xargs -i rm -rf {}
+rm -rf feeds/packages/libs/libcap
 
 git clone https://github.com/fw876/helloworld package/luci-app-ssr-plus
 git clone https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
-git clone https://github.com/jerrykuku/luci-app-vssr package/luci-app-vssr
-svn co  https://github.com/vernesong/OpenClash/trunk feeds/luci/luci-app-openclash > /dev/null 2>&1
-git clone https://github.com/frainzy1477/luci-app-clash package/luci-app-clash
 
-curl -fsSL https://raw.githubusercontent.com/281677160/AdGuardHome/main/luci-app-adguardhome/root/etc/config/AdGuardHome.yaml > package/diy/luci-app-adguardhome/root/etc/config/AdGuardHome.yaml
-curl -fsSL https://raw.githubusercontent.com/281677160/AdGuardHome/main/luci-app-adguardhome/po/zh-cn/AdGuardHome.po > package/diy/luci-app-adguardhome/po/zh-cn/AdGuardHome.po
-
-rm -rf feeds/packages/libs/libcap
-svn co https://github.com/coolsnowwolf/packages/trunk/libs/libcap feeds/packages/libs/libcap > /dev/null 2>&1
 sed -i 's/DEFAULT_PACKAGES +=/DEFAULT_PACKAGES += luci-app-passwall/g' target/linux/x86/Makefile
 sed -i "/exit 0/i\chmod +x /etc/webweb.sh && source /etc/webweb.sh > /dev/null 2>&1" package/base-files/files/etc/rc.local
 }
@@ -105,17 +90,11 @@ Diy_all() {
 git clone --depth 1 -b "${REPO_BRANCH}" https://github.com/281677160/openwrt-package
 cp -Rf openwrt-package/* "${Home}" && rm -rf "${Home}"/openwrt-package
 
-mv "${PATH1}"/AutoBuild_Tools.sh package/base-files/files/bin
-
 if [[ ${REGULAR_UPDATE} == "true" ]]; then
-	svn co https://github.com/281677160/luci-app-autoupdate/trunk feeds/luci/applications/luci-app-autoupdate > /dev/null 2>&1
-	mv "${PATH1}"/AutoUpdate.sh package/base-files/files/bin
+	git clone https://github.com/281677160/luci-app-autoupdate feeds/luci/applications/luci-app-autoupdate
+	cp -Rf "${PATH1}"/AutoUpdate.sh package/base-files/files/bin
 fi
 
-git clone https://github.com/kongfl888/po2lmo
-pushd po2lmo
-make && sudo make install
-popd
 }
 
 
@@ -223,6 +202,36 @@ fi
 # 为编译做最后处理
 ################################################################################################################
 Diy_chuli() {
+mkdir -p "${Home}"/files/etc/config
+case "${REPO_BRANCH}" in
+"19.07") 
+	if [[ "${TARGET_PROFILE}" == "x86-64" ]]; then
+		cp -Rf "${Home}"/build/common/Custom/i915-4.14 "${Home}"/target/linux/x86/config-4.14
+		cp -Rf "${Home}"/build/common/Custom/i915-4.19 "${Home}"/target/linux/x86/config-4.19
+	elif [[ "${TARGET_PROFILE}" == "d-team_newifi-d2" ]]; then
+		cp -Rf "${Home}"/build/common/Custom/mac80211.sh "${Home}"/package/kernel/mac80211/files/lib/wifi/mac80211.sh
+		cp -Rf "${Home}"/build/common/Custom/system_d-team_newifi-d2 "${Home}"/files/etc/config/system
+	fi
+;;
+"openwrt-18.06")
+	if [[ "${TARGET_PROFILE}" == "x86-64" ]]; then
+		cp -Rf "${Home}"/build/common/Custom/i915-4.14 "${Home}"/target/linux/x86/config-4.14
+		cp -Rf "${Home}"/build/common/Custom/i915-4.19 "${Home}"/target/linux/x86/config-4.19
+	elif [[ "${TARGET_PROFILE}" == "d-team_newifi-d2" ]]; then
+		cp -Rf "${Home}"/build/common/Custom/mac80211.sh "${Home}"/package/kernel/mac80211/files/lib/wifi/mac80211.sh
+		cp -Rf "${Home}"/build/common/Custom/system_d-team_newifi-d2 "${Home}"/files/etc/config/system
+	fi
+;;
+"openwrt-21.02")
+	if [[ "${TARGET_PROFILE}" == "x86-64" ]]; then
+		cp -Rf "${Home}"/build/common/Custom/i915-5.4 "${Home}"/target/linux/x86/config-5.4
+	elif [[ "${TARGET_PROFILE}" == "d-team_newifi-d2" ]]; then
+		cp -Rf "${Home}"/build/common/Custom/mac80211.sh "${Home}"/package/kernel/mac80211/files/lib/wifi/mac80211.sh
+		cp -Rf "${Home}"/build/common/Custom/system_d-team_newifi-d2 "${Home}"/files/etc/config/system
+	fi
+;;
+esac
+
 grep -i CONFIG_PACKAGE_luci-app .config | grep  -v \# > Plug-in
 grep -i CONFIG_PACKAGE_luci-theme .config | grep  -v \# >> Plug-in
 awk '$0=NR$0' Plug-in > Plug-2
@@ -231,10 +240,50 @@ sed -i 's/CONFIG_PACKAGE_/、/g' Plug-2
 sed -i 's/=y/\"/g' Plug-2
 awk '{print "	" $0}' Plug-2 > Plug-in
 sed -i "s/^/TIME g \"/g" Plug-in
+cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c > CPU
+cat /proc/cpuinfo | grep "cpu cores" | uniq >> CPU
+sed -i 's|[[:space:]]||g; s|^.||' CPU && sed -i 's|CPU||g; s|pucores:||' CPU
+CPUNAME="$(awk 'NR==1' CPU)" && CPUCORES="$(awk 'NR==2' CPU)"
+rm -rf CPU
 find . -name 'LICENSE' -o -name 'README' -o -name 'README.md' | xargs -i rm -rf {}
-find . -name 'CONTRIBUTED.md' -o -name 'README_EN.md' | xargs -i rm -rf {}
+find . -name 'CONTRIBUTED.md' -o -name 'README_EN.md' -o -name 'DEVICE_NAME' | xargs -i rm -rf {}
 }
 
+
+################################################################################################################
+# 公告
+################################################################################################################
+GONGGAO() {
+[[ -z "$1" ]] && {
+	echo -ne " "
+} || {
+	case $1 in
+		r) export Color="\e[31;1m";;
+		g) export Color="\e[32m";;
+		b) export Color="\e[34m";;
+		y) export Color="\e[33m";;
+		z) export Color="\e[36m";;
+	esac
+		echo -e "\n\e[35;1m[$(date "+ 公 告 ")]\e[0m ${Color}${2}\e[0m"
+	}
+}
+
+Diy_gonggao() {
+GONGGAO z "《Lede_source文件的Luci版本为18.06，内核版本为5.4》"
+GONGGAO g "《Lienol_source文件的Luci版本为19.07，内核版本为4.14》"
+GONGGAO b "《Project_source文件的Luci版本为18.06，内核版本为4.19》"
+GONGGAO y "《Spirit_source文件的Luci版本为21.02，内核版本为5.4》"
+GONGGAO r "《如果编译脚本在这里就出现错误的话，意思就是不得不更新脚本了，怎么更新我会在这里写明》"
+echo
+echo
+}
+
+Diy_tongzhi() {
+GONGGAO r "《请用复制粘贴方式来更新你的build-openwrt.yml文件至6月2号凌晨1点后的最新版》"
+echo
+echo
+exit 1
+}
 
 ################################################################################################################
 # 编译信息
@@ -328,6 +377,13 @@ fi
 echo
 TIME z " 系统空间      类型   总数  已用  可用 使用率"
 cd ../ && df -hT $PWD && cd openwrt
+echo
+TIME z "  本服务器的CPU型号为[${CPUNAME}]"
+echo
+TIME z "  在此系统上使用核心数为[ ${CPUCORES} ],线程数为[ $(nproc) ]"
+echo
+TIME z "  下面将使用[$(nproc)线程编译固件]"
+echo
 echo
 if [ -n "$(ls -A "${Home}/Chajianlibiao" 2>/dev/null)" ]; then
 	echo
