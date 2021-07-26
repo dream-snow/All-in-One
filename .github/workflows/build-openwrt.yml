@@ -41,7 +41,7 @@ jobs:
     - name: 准备结束
       uses: actions/checkout@v2
 
-    - name: 读取功能开关设置
+    - name: 读取脚本设置
       run: |
         source "${GITHUB_WORKSPACE}/build/${{matrix.target}}/settings.ini"
         echo "REPO_URL=${REPO_URL}" >> $GITHUB_ENV
@@ -56,11 +56,14 @@ jobs:
         echo "UPLOAD_RELEASE=${UPLOAD_RELEASE}" >> $GITHUB_ENV
         echo "SERVERCHAN_SCKEY=${SERVERCHAN_SCKEY}" >> $GITHUB_ENV
         echo "REGULAR_UPDATE=${REGULAR_UPDATE}" >> $GITHUB_ENV
+        echo "BY_INFORMATION=${BY_INFORMATION}" >> $GITHUB_ENV
         echo "CangKu=${Apidz##*/}" >> $GITHUB_ENV
         echo "Modelfile=${{matrix.target}}" >> $GITHUB_ENV
         
-    - name: 整理脚本
+    - name: 公告
       run: |
+        echo
+        git clone --depth 1 -b main https://github.com/281677160/common build/common > /dev/null 2>&1
         chmod -R +x "${GITHUB_WORKSPACE}/build/common"
         if [[ "${REPO_BRANCH}" == "master" ]]; then
           echo "ZZZ=package/lean/default-settings/files/zzz-default-settings" >> $GITHUB_ENV
@@ -135,7 +138,6 @@ jobs:
         if [[ "${REGULAR_UPDATE}" == "true" ]]; then
           source "${PATH1}/upgrade.sh" && Diy_Part1
         fi
-
  
     - name: SSH远程连接
       uses: danshui-git/debugger-action@master
@@ -194,16 +196,13 @@ jobs:
     - name: 整理固件文件夹
       id: organizer
       run: |
+        if [ "${Modelfile}" == "openwrt_amlogic" ]; then
+          source "${PATH1}/common.sh" && Diy_amlogic
+        fi
         cd openwrt
-        if [[ "${REGULAR_UPDATE}" == "true" ]]; then
-          source "${PATH1}/upgrade.sh" && Diy_Part3
-        fi
+        cp -Rf bin/targets/*/* "${Home}"/upgrade
         cd bin && mkdir config
-        find ./ -name "*config.buildinfo*" | xargs -i mv -f {} config
-        if [ -n "$(ls -A "targets/x86" 2>/dev/null)" ]; then
-          find ./ -name "*kernel*" | xargs -i rm -rf {}
-          find ./ -name "*rootfs*" | xargs -i rm -rf {}
-        fi
+        cp -Rf targets/*/*/config.buildinfo "${Home}"/bin/config/config.txt
         cd targets/*/*
         find -name "*buildinfo*" | xargs -i rm -rf {}
         find -name "*sha256sums*" | xargs -i rm -rf {}
@@ -211,6 +210,7 @@ jobs:
         find -name "*vmlinuz*" | xargs -i rm -rf {}
         find -name "*Image*" | xargs -i rm -rf {}
         rm -rf packages
+        rename -v "s/^openwrt/${{ env.date1 }}-${{ env.CODE }}/" *
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "BOT=TRUE" >> $GITHUB_ENV
         echo "::set-output name=status::success"
@@ -222,6 +222,32 @@ jobs:
         name: .config_${{ env.CODE }}_${{ env.TARGET_PROFILE }}_${{ env.date }}
         path: openwrt/bin/config
    
+    - name: 整理发布信息
+      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
+      run: |
+        echo "### $(date +"%Y年%m月%d号-%H点%M分")" > update_log.txt
+        curl -fsSL git.io/file-transfer | sh
+        ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
+        echo "##### 奶牛快传：$(cat cowtransfer.log | grep https | cut -f3 -d" ")" >> update_log.txt
+        ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
+        echo "##### WETRANSFER：$(cat wetransfer.log | grep https | cut -f3 -d" ")" >> update_log.txt
+     
+    - name: 发布固件
+      uses: ncipollo/release-action@v1
+      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
+      with:
+        name: ${{ env.CODE }}-${{ env.TARGET_PROFILE }}
+        tag: ${{ env.date }}
+        token: ${{ secrets.REPO_TOKEN }}
+        bodyFile: "update_log.txt"
+        artifacts: "${{ env.FIRMWARE }}/*"
+        
+    - name: 整理定时更新需要的固件
+      if: steps.compile.outputs.status == 'success' && env.REGULAR_UPDATE == 'true'
+      run: |
+       cd openwrt
+       source "${PATH1}/upgrade.sh" && Diy_Part3
+        
     - name: 把定时更新固件发布到云端
       uses: softprops/action-gh-release@v1
       if: steps.organizer.outputs.status == 'success' && env.REGULAR_UPDATE == 'true'
@@ -231,15 +257,3 @@ jobs:
         name: update_Firmware
         tag_name: AutoUpdate
         files: openwrt/bin/Firmware/*
-    
-    - name: 发布固件
-      uses: ncipollo/release-action@v1
-      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
-      with:
-        name: ${{ env.CODE }}-${{ env.TARGET_PROFILE }}
-        tag: ${{ env.date2 }}
-        token: ${{ secrets.REPO_TOKEN }}
-        bodyFile: "update_log.txt"
-        artifacts: "${{ env.FIRMWARE }}/*"
-    
- 
