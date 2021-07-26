@@ -1,7 +1,0 @@
-
-config global 'global'
-
-config appfilter 'appfilter'
-
-config user 'user'
-

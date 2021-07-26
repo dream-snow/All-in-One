@@ -1,7 +1,0 @@
-1 1 * * * /usr/share/jd-dailybonus/newapp.sh -w
-1 23 * * * /usr/share/jd-dailybonus/newapp.sh -u
-0 1 * * * echo "" > /tmp/vssr.log
-0 2 * * * /usr/bin/lua /usr/share/vssr/subscribe.lua
-0 2 * * * /usr/bin/lua /usr/share/vssr/update.lua
-0 4 * * * /usr/share/koolproxy/kpupdate
-0 6 * * * /usr/share/adbyby/adblock.sh > /tmp/adupdate.log 2>&1
