@@ -59,8 +59,7 @@ jobs:
         echo "BY_INFORMATION=${BY_INFORMATION}" >> $GITHUB_ENV
         echo "CangKu=${Apidz##*/}" >> $GITHUB_ENV
         echo "Modelfile=${{matrix.target}}" >> $GITHUB_ENV
-        
-    - name: 公告
+    - name: 公 告
       run: |
         echo
         git clone --depth 1 -b main https://github.com/281677160/common build/common > /dev/null 2>&1
@@ -69,6 +68,14 @@ jobs:
           echo "ZZZ=package/lean/default-settings/files/zzz-default-settings" >> $GITHUB_ENV
           echo "CODE=Lede" >> $GITHUB_ENV
           echo "OpenWrt_name=18.06" >> $GITHUB_ENV
+        elif [[ "${REPO_BRANCH}" == "19.07" ]]; then
+          echo "ZZZ=package/default-settings/files/zzz-default-settings" >> $GITHUB_ENV
+          echo "CODE=Lienol" >> $GITHUB_ENV
+          echo "OpenWrt_name=19.07" >> $GITHUB_ENV
+        elif [[ "${REPO_BRANCH}" == "openwrt-21.02" ]]; then
+          echo "ZZZ=package/emortal/default-settings/files/zzz-default-settings" >> $GITHUB_ENV
+          echo "CODE=Mortal" >> $GITHUB_ENV
+          echo "OpenWrt_name=21.02" >> $GITHUB_ENV
         fi
         echo "NETIP=package/base-files/files/etc/networkip" >> $GITHUB_ENV
         if [ -n "$(ls -A build/common/0712gg 2>/dev/null)" ]; then
@@ -76,7 +83,10 @@ jobs:
         else
           source build/common/common.sh && Diy_tongzhi
         fi
-  
+    - name: 电报机器人信息通知
+      if: env.SERVERCHAN_SCKEY == 'true'
+      run: |
+        curl -k --data chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" --data "text=🎉 主人：您正在使用【${{matrix.target}}】文件夹编译固件中(${{env.CangKu}}仓库的#${{env.Run_number}}号),请耐心等待...... 😋" "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"
     - name: 部署编译环境
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -89,13 +99,12 @@ jobs:
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
-        
     - name: 下载"${{matrix.target}}"源码
       working-directory: /workdir
       run: |
         git clone -b "$REPO_BRANCH" --single-branch "$REPO_URL" openwrt
         cd openwrt
-        ./scripts/feeds clean && ./scripts/feeds update -a > /dev/null 2>&1
+        ./scripts/feeds update -a > /dev/null 2>&1
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         echo "Home=${GITHUB_WORKSPACE}/openwrt" >> $GITHUB_ENV
         echo "PATH1=${GITHUB_WORKSPACE}/openwrt/build/${{matrix.target}}" >> $GITHUB_ENV
@@ -130,8 +139,8 @@ jobs:
         if [[ "${REGULAR_UPDATE}" == "true" ]]; then
           source "${PATH1}/upgrade.sh" && Diy_Part1
         fi
- 
-    - name: SSH远程连接
+        
+    - name: SSH远程连接（配置固件）
       uses: danshui-git/debugger-action@master
       if: env.SSH_ACTIONS == 'true' || (github.event.inputs.ssh == 'ssh' && github.event.inputs.ssh  != 'false')
       env:
@@ -171,7 +180,6 @@ jobs:
       id: package
       run: |
         cd openwrt
-        make defconfig
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
@@ -180,11 +188,18 @@ jobs:
       id: compile
       run: |
         cd openwrt
-        echo -e "$(($(nproc)+1)) thread compile"
-        make -j$(($(nproc)+1)) || make -j1 V=s
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc) || make -j1 V=s
         echo "::set-output name=status::success"
         echo "date=$(date "+%Y%m%d%H%M%S")" >> $GITHUB_ENV
         echo "date1=$(date +'%m.%d')" >> $GITHUB_ENV
+        
+    - name: 上传bin文件夹(固件+ipk)在 github actions
+      uses: actions/upload-artifact@v2
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+      with:
+        name: filename+ipk_${{ env.CODE }}_${{ env.TARGET_PROFILE }}_${{ env.Compile_Date }}
+        path: openwrt/bin
     
     - name: 整理固件文件夹
       id: organizer
@@ -208,13 +223,31 @@ jobs:
         echo "BOT=TRUE" >> $GITHUB_ENV
         echo "::set-output name=status::success"
     
-    - name: 上传.config配置文件在github actions
+    - name: 上传.config配置文件在 github actions
       uses: actions/upload-artifact@v2
       if: steps.organizer.outputs.status == 'success' && env.UPLOAD_CONFIG == 'true'
       with:
-        name: .config_${{ env.CODE }}_${{ env.TARGET_PROFILE }}_${{ env.date }}
+        name: .config_${{ env.CODE }}_${{ env.TARGET_PROFILE }}_${{ env.Compile_Date }}
         path: openwrt/bin/config
-   
+
+    - name: 上传固件在 github actions
+      uses: actions/upload-artifact@v2
+      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true'
+      with:
+        name: ${{ env.OpenWrt_name }}-${{ env.CODE }}-${{ env.TARGET_PROFILE }}-firmware-${{ env.Compile_Date }}
+        path: ${{ env.FIRMWARE }}
+    
+    - name: 上传固件到「奶牛快传」和「WeTransfer」
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
+      run: |
+        curl -fsSL git.io/file-transfer | sh
+        ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
+        sed -i "s/Download Link/COWTRANSFER/g" cowtransfer.log
+        echo "::warning file=cowtransfer.com::$(cat cowtransfer.log | grep https)"
+        ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
+        sed -i "s/Download Link/WETRANSFER/g" wetransfer.log
+        echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"
+    
     - name: 整理发布信息
       if: steps.organizer.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
       run: |
@@ -224,7 +257,7 @@ jobs:
         echo "##### 奶牛快传：$(cat cowtransfer.log | grep https | cut -f3 -d" ")" >> update_log.txt
         ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
         echo "##### WETRANSFER：$(cat wetransfer.log | grep https | cut -f3 -d" ")" >> update_log.txt
-     
+    
     - name: 发布固件
       uses: ncipollo/release-action@v1
       if: steps.organizer.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
