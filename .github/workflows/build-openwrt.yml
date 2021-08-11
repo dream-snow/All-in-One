@@ -117,12 +117,6 @@ jobs:
  
     - name: 加载源,补丁和自定义设置
       run: |
-        echo "Apply files..."     
-        [ -e shadow ] && cp -f shadow openwrt/package/base-files/files/etc
-        [ -e config_generate ] && cp -f config_generate openwrt/package/base-files/files/bin
-        [ -e 99-default_network ] && cp -f 99-default_network openwrt/package/base-files/files/etc/board.d
-        [ -e 10-default.conf ] && cp -f 10-default.conf openwrt/package/base-files/files/etc/sysctl.d      
-      
         echo "Compile_Date=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
         cp -Rf `find ./ -maxdepth 1 -type d ! -path './openwrt' ! -path './'` openwrt
         mv -f "${Home}"/build/common/*.sh "${PATH1}"
