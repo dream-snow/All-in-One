@@ -7,33 +7,32 @@
 
 
 
-
-  cat >$NETIP <<-EOF
-  uci set network.lan.type='bridge'
-  uci set network.lan.ifname='eth1 eth2 eth3'
-  uci set network.lan.proto='static'
-  uci set network.lan.ipaddr='192.168.20.2'                                    # IPv4 地址(openwrt后台地址)
-  uci set network.lan.netmask='255.255.255.0'                                 # IPv4 子网掩码
-  uci set network.lan.gateway='192.168.20.1'                                   # IPv4 网关
-  uci set network.lan.broadcast='192.168.20.255'                               # IPv4 广播
-  uci set network.lan.dns='114.114.114.114 223.5.5.5'                         # DNS(多个DNS要用空格分开)
-  uci set network.lan.delegate='0'                                            # 去掉LAN口使用内置的 IPv6 管理
+cat >$NETIP <<-EOF
+uci set network.lan.type='bridge'
+uci set network.lan.ifname='eth1 eth2 eth3'
+uci set network.lan.proto='static'
+uci set network.lan.ipaddr='192.168.20.2'                                    # IPv4 地址(openwrt后台地址)
+uci set network.lan.netmask='255.255.255.0'                                 # IPv4 子网掩码
+uci set network.lan.gateway='192.168.20.1'                                   # IPv4 网关
+uci set network.lan.broadcast='192.168.20.255'                               # IPv4 广播
+uci set network.lan.dns='114.114.114.114 223.5.5.5'                         # DNS(多个DNS要用空格分开)
+uci set network.lan.delegate='0'                                            # 去掉LAN口使用内置的 IPv6 管理
   
-  uci set network.wan.ifname='eth0'
-  uci set network.wan._orig_ifname='eth0'
-  uci set network.wan._orig_bridge='false'
-  uci set network.wan.proto='pppoe'
-  uci set network.wan.password='123456'
-  uci set network.wan.ipv6='auto'
-  uci set network.wan.keepalive='0'
-  #uci set network.wan.username=''
-  uci set network.wan.delegate='0'
+uci set network.wan.ifname='eth0'
+uci set network.wan._orig_ifname='eth0'
+uci set network.wan._orig_bridge='false'
+uci set network.wan.proto='pppoe'
+uci set network.wan.password='123456'
+uci set network.wan.ipv6='auto'
+uci set network.wan.keepalive='0'
+# uci set network.wan.username=''
+uci set network.wan.delegate='0'
   
-  uci commit network                                                          # 不要删除跟注释,除非上面全部删除或注释掉了
-  uci set dhcp.lan.ignore='1'                                                 # 关闭DHCP功能
-  uci commit dhcp                                                             # 跟‘关闭DHCP功能’联动,同时启用或者删除跟注释
+uci commit network                                                          # 不要删除跟注释,除非上面全部删除或注释掉了
+uci set dhcp.lan.ignore='1'                                                 # 关闭DHCP功能
+uci commit dhcp                                                             # 跟‘关闭DHCP功能’联动,同时启用或者删除跟注释
 # uci set system.@system[0].hostname='OpenWrt-123'                            # 修改主机名称为OpenWrt-123
-  EOF
+EOF
 
 
 
@@ -43,7 +42,7 @@ sed -i "s/OpenWrt /${Author} compiled in $(TZ=UTC-8 date "+%Y.%m.%d") @ OpenWrt 
 
 # sed -i '/CYXluq4wUazHjmCDBCqXF/d' $ZZZ                                                            # 设置密码为空
 
-#sed -i 's/PATCHVER:=5.10/PATCHVER:=5.4/g' target/linux/x86/Makefile                              # 默认内核5.10，修改内核为5.4
+# sed -i 's/PATCHVER:=5.10/PATCHVER:=5.4/g' target/linux/x86/Makefile                              # 默认内核5.10，修改内核为5.4
 
 # K3专用，编译K3的时候只会出K3固件
 #sed -i 's|^TARGET_|# TARGET_|g; s|# TARGET_DEVICES += phicomm_k3|TARGET_DEVICES += phicomm_k3|' target/linux/bcm53xx/image/Makefile
